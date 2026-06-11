@@ -1,0 +1,518 @@
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  Pressable,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  ScrollView,
+  Alert,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { RichEditor, RichToolbar, actions } from 'react-native-pell-rich-editor';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { useProject } from '../../contexts/ProjectContext';
+import { getCategoriesByType, ItemType } from '../utils/categories';
+
+type NoteEditorRouteParams = {
+  noteId?: string;
+  itemType?: ItemType;
+};
+
+type NoteEditorRoute = RouteProp<{ NoteEditor: NoteEditorRouteParams }, 'NoteEditor'>;
+
+export default function NoteEditor(): React.ReactElement {
+  const navigation = useNavigation<any>();
+  const route = useRoute<NoteEditorRoute>();
+  const { user } = useAuth();
+  const { currentProjectId } = useProject();
+  const richText = useRef<RichEditor>(null);
+
+  const { noteId, itemType: initialItemType } = route.params || {};
+
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState(''); // リッチテキスト用（memo）
+  const [plainContent, setPlainContent] = useState(''); // プレーンテキスト用（term, question）
+  const [itemType, setItemType] = useState<ItemType>(initialItemType || 'memo');
+  const [category, setCategory] = useState('考えたこと');
+  const [loading, setLoading] = useState(!!noteId);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle');
+  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
+
+  const currentCategories = getCategoriesByType(itemType);
+  const isRichTextMode = itemType === 'memo';
+
+  useEffect(() => {
+    if (noteId) {
+      loadNote();
+    }
+  }, [noteId]);
+
+  useEffect(() => {
+    // カテゴリの初期値を設定
+    const categories = getCategoriesByType(itemType);
+    setCategory(categories[0]);
+  }, [itemType]);
+
+  const loadNote = async () => {
+    if (!noteId || !user?.id) return;
+
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('study_items')
+        .select('*')
+        .eq('id', noteId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('[NoteEditor] ノート読み込みエラー:', error);
+        Alert.alert('エラー', 'ノートの読み込みに失敗しました');
+        navigation.goBack();
+      } else if (data) {
+        setTitle(data.title);
+        setItemType(data.item_type as ItemType);
+        setCategory(data.category || '考えたこと');
+
+        // メモの場合はリッチテキスト、それ以外はプレーンテキスト
+        if (data.item_type === 'memo') {
+          setContent(data.content);
+          richText.current?.setContentHTML(data.content);
+        } else {
+          setPlainContent(data.content);
+        }
+      }
+    } catch (err) {
+      console.error('[NoteEditor] ノート読み込み例外:', err);
+      Alert.alert('エラー', '予期しないエラーが発生しました');
+      navigation.goBack();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAutoSave = async () => {
+    if (!user?.id || !currentProjectId || !title.trim()) return;
+
+    setSaveStatus('saving');
+
+    try {
+      // メモの場合はリッチテキスト、それ以外はプレーンテキストを保存
+      const contentToSave = isRichTextMode ? content : plainContent;
+
+      const noteData = {
+        user_id: user.id,
+        project_id: currentProjectId,
+        title: title.trim(),
+        content: contentToSave,
+        item_type: itemType,
+        category: category,
+      };
+
+      if (noteId) {
+        // 更新
+        const { error } = await supabase
+          .from('study_items')
+          .update(noteData)
+          .eq('id', noteId)
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('[NoteEditor] 自動保存エラー:', error);
+        } else {
+          console.log('[NoteEditor] 自動保存成功');
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus('idle'), 2000);
+        }
+      } else {
+        // 新規作成
+        const { data, error } = await supabase
+          .from('study_items')
+          .insert(noteData)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('[NoteEditor] 自動保存エラー:', error);
+        } else if (data) {
+          console.log('[NoteEditor] 新規保存成功:', data.id);
+          // 新規作成後はnoteIdを更新して次回は更新処理になるようにする
+          navigation.setParams({ noteId: data.id } as any);
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus('idle'), 2000);
+        }
+      }
+    } catch (err) {
+      console.error('[NoteEditor] 自動保存例外:', err);
+    }
+  };
+
+  const handleContentChange = (html: string) => {
+    setContent(html);
+
+    // 既存のタイマーをクリア
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+
+    // 1.5秒後に自動保存
+    const timer = setTimeout(() => {
+      handleAutoSave();
+    }, 1500);
+
+    setAutoSaveTimer(timer);
+  };
+
+  const handleTitleChange = (text: string) => {
+    setTitle(text);
+
+    // 既存のタイマーをクリア
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+
+    // 1.5秒後に自動保存
+    const timer = setTimeout(() => {
+      handleAutoSave();
+    }, 1500);
+
+    setAutoSaveTimer(timer);
+  };
+
+  const handleClose = () => {
+    // 保存中でなければ即座に戻る
+    if (saveStatus !== 'saving') {
+      navigation.goBack();
+    } else {
+      Alert.alert('保存中', '保存が完了するまでお待ちください');
+    }
+  };
+
+  const handleItemTypeChange = (newType: ItemType) => {
+    setItemType(newType);
+    const categories = getCategoriesByType(newType);
+    setCategory(categories[0]);
+
+    // 種別変更時にコンテンツを相互変換
+    if (newType === 'memo') {
+      // プレーンテキスト → リッチテキストへ切り替え
+      if (plainContent) {
+        const htmlContent = plainContent.replace(/\n/g, '<br>');
+        setContent(htmlContent);
+        richText.current?.setContentHTML(htmlContent);
+      }
+    } else {
+      // リッチテキスト → プレーンテキストへ切り替え
+      if (content) {
+        // HTMLタグを削除してプレーンテキストに変換
+        const plainText = content.replace(/<[^>]+>/g, '').replace(/<br\s*\/?>/gi, '\n');
+        setPlainContent(plainText);
+      }
+    }
+  };
+
+  const getTypeLabel = (type: ItemType): string => {
+    switch (type) {
+      case 'term':
+        return '📖 用語';
+      case 'memo':
+        return '📝 メモ';
+      case 'question':
+        return '❓ 問題';
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF9900" />
+          <Text style={styles.loadingText}>読み込み中...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+        keyboardVerticalOffset={0}
+      >
+        {/* ヘッダー */}
+        <View style={styles.header}>
+          <Pressable style={styles.backButton} onPress={handleClose} accessibilityLabel="閉じる">
+            <Ionicons name="close" size={28} color="#374151" />
+          </Pressable>
+          <View style={styles.headerCenter}>
+            {saveStatus === 'saving' && (
+              <View style={styles.saveStatus}>
+                <ActivityIndicator size="small" color="#FF9900" />
+                <Text style={styles.saveStatusText}>同期中...</Text>
+              </View>
+            )}
+            {saveStatus === 'saved' && (
+              <View style={styles.saveStatus}>
+                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                <Text style={[styles.saveStatusText, { color: '#10B981' }]}>保存されました</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.headerSpacer} />
+        </View>
+
+        {/* メタデータセクション */}
+        <ScrollView
+          style={styles.metaSection}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.metaContent}
+        >
+          {/* 種別 */}
+          {(['term', 'memo', 'question'] as ItemType[]).map((type) => (
+            <Pressable
+              key={type}
+              style={[styles.metaChip, itemType === type && styles.metaChipActive]}
+              onPress={() => handleItemTypeChange(type)}
+            >
+              <Text style={[styles.metaChipText, itemType === type && styles.metaChipTextActive]}>
+                {getTypeLabel(type)}
+              </Text>
+            </Pressable>
+          ))}
+
+          <View style={styles.metaDivider} />
+
+          {/* カテゴリ */}
+          {currentCategories.map((cat) => (
+            <Pressable
+              key={cat}
+              style={[styles.metaChip, category === cat && styles.metaChipActive]}
+              onPress={() => setCategory(cat)}
+            >
+              <Text style={[styles.metaChipText, category === cat && styles.metaChipTextActive]}>
+                {cat}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        {/* タイトル */}
+        <View style={styles.titleSection}>
+          <TextInput
+            style={styles.titleInput}
+            placeholder="タイトルを入力"
+            placeholderTextColor="#9CA3AF"
+            value={title}
+            onChangeText={handleTitleChange}
+            multiline
+          />
+        </View>
+
+        {/* エディタエリア - 種別に応じて切り替え */}
+        {isRichTextMode ? (
+          <>
+            {/* リッチテキストエディタ（メモ用） */}
+            <ScrollView style={styles.editorContainer}>
+              <RichEditor
+                ref={richText}
+                style={styles.richEditor}
+                placeholder="内容を入力..."
+                onChange={handleContentChange}
+                initialContentHTML={content}
+              />
+            </ScrollView>
+
+            {/* ツールバー */}
+            <RichToolbar
+              editor={richText}
+              actions={[
+                actions.setBold,
+                actions.setItalic,
+                actions.setUnderline,
+                actions.insertBulletsList,
+                actions.insertOrderedList,
+                actions.heading1,
+                actions.heading2,
+                actions.undo,
+                actions.redo,
+              ]}
+              iconTint="#374151"
+              selectedIconTint="#FF9900"
+              style={styles.toolbar}
+            />
+          </>
+        ) : (
+          <>
+            {/* プレーンテキストエディタ（用語・問題用） */}
+            <ScrollView style={styles.editorContainer}>
+              <TextInput
+                style={styles.plainTextEditor}
+                placeholder={
+                  itemType === 'term'
+                    ? '用語の意味や説明を入力...'
+                    : '問題文と解答・解説を入力...'
+                }
+                placeholderTextColor="#9CA3AF"
+                value={plainContent}
+                onChangeText={(text) => {
+                  setPlainContent(text);
+
+                  // 自動保存タイマーをセット
+                  if (autoSaveTimer) {
+                    clearTimeout(autoSaveTimer);
+                  }
+                  const timer = setTimeout(() => {
+                    handleAutoSave();
+                  }, 1500);
+                  setAutoSaveTimer(timer);
+                }}
+                multiline
+                textAlignVertical="top"
+              />
+            </ScrollView>
+          </>
+        )}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerSpacer: {
+    width: 44,
+  },
+  saveStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  saveStatusText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#FF9900',
+  },
+
+  metaSection: {
+    maxHeight: 60,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  metaContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  metaChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  metaChipActive: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FF9900',
+  },
+  metaChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  metaChipTextActive: {
+    color: '#FF9900',
+  },
+  metaDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 4,
+  },
+
+  titleSection: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  titleInput: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+    padding: 0,
+    margin: 0,
+  },
+
+  editorContainer: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+  },
+  richEditor: {
+    flex: 1,
+    minHeight: 300,
+    backgroundColor: '#FFFFFF',
+  },
+  plainTextEditor: {
+    flex: 1,
+    minHeight: 300,
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#111827',
+    padding: 0,
+  },
+
+  toolbar: {
+    backgroundColor: '#F9FAFB',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+});
