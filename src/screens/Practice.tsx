@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   SafeAreaView,
   View,
@@ -32,7 +32,7 @@ interface StudyItem {
   created_at: string;
 }
 
-type CategoryKey = 'all' | 'network' | 'security' | 'database' | 'computing' | 'storage' | 'other';
+type CategoryKey = 'all' | string;
 
 export default function Practice({ navigation }: PracticeScreenProps): React.ReactElement {
   const { user, loading: authLoading } = useAuth();
@@ -43,15 +43,21 @@ export default function Practice({ navigation }: PracticeScreenProps): React.Rea
   const [studyItems, setStudyItems] = useState<StudyItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const categories: { key: CategoryKey; label: string }[] = [
-    { key: 'all', label: 'すべて' },
-    { key: 'network', label: 'ネットワーク' },
-    { key: 'security', label: 'セキュリティ' },
-    { key: 'database', label: 'データベース' },
-    { key: 'computing', label: 'コンピューティング' },
-    { key: 'storage', label: 'ストレージ' },
-    { key: 'other', label: 'その他' },
-  ];
+  // すべてのカテゴリを動的に取得（重複を除外）
+  const allCategories = React.useMemo(() => {
+    const categorySet = new Set<string>();
+    studyItems.forEach(item => {
+      if (item.category) {
+        categorySet.add(item.category);
+      }
+    });
+    return ['すべて', ...Array.from(categorySet).sort()];
+  }, [studyItems]);
+
+  const categories = React.useMemo(() =>
+    allCategories.map(label => ({ key: label === 'すべて' ? 'all' : label, label })),
+    [allCategories]
+  );
 
   useEffect(() => {
     if (!user?.id || !currentProjectId) {
@@ -92,12 +98,6 @@ export default function Practice({ navigation }: PracticeScreenProps): React.Rea
     }
   };
 
-  const getCategoryKey = (categoryLabel: string | null): CategoryKey => {
-    if (!categoryLabel) return 'other';
-    const found = categories.find(c => c.label === categoryLabel);
-    return found?.key || 'other';
-  };
-
   const filteredItems = studyItems.filter(item => {
     // フラッシュカードモードの場合は用語（term）のみに絞り込む
     if (questionType === 'flash') {
@@ -114,7 +114,7 @@ export default function Practice({ navigation }: PracticeScreenProps): React.Rea
 
     // カテゴリフィルター
     if (category === 'all') return true;
-    return getCategoryKey(item.category) === category;
+    return item.category === category;
   });
 
   const handleStartTest = () => {
