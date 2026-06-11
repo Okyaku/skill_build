@@ -2,15 +2,15 @@
 
 ## ✅ Google Cloud Console の設定 - 完了
 あなたの設定は正しいです:
-- 承認済みの JavaScript 生成元: `https://ropxetguyjcmlimaypme.supabase.co`
-- 承認済みのリダイレクト URI: `https://ropxetguyjcmlimaypme.supabase.co/auth/v1/callback`
+- 承認済みの JavaScript 生成元: `https://YOUR_PROJECT_ID.supabase.co`
+- 承認済みのリダイレクト URI: `https://YOUR_PROJECT_ID.supabase.co/auth/v1/callback`
 
 ## 次のステップ: Supabase Dashboard の確認
 
 ### 1. Supabase Dashboard でGoogleプロバイダを確認
 
 1. https://supabase.com/dashboard を開く
-2. プロジェクト「ropxetguyjcmlimaypme」を選択
+2. プロジェクト「YOUR_PROJECT_ID」を選択
 3. 左メニュー「Authentication」→「Providers」をクリック
 4. 「Google」を探してクリック
 
@@ -81,7 +81,7 @@ npx expo start --clear
 **原因**: Google Cloud Console のリダイレクトURIが間違っている
 **解決策**: リダイレクトURIが完全に一致しているか確認:
 ```
-https://ropxetguyjcmlimaypme.supabase.co/auth/v1/callback
+https://YOUR_PROJECT_ID.supabase.co/auth/v1/callback
 ```
 （スペース、大文字小文字、スラッシュの位置など）
 

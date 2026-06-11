@@ -83,7 +83,7 @@ USING (auth.uid() = user_id);
 `lib/supabase.ts` を開いて、URLを確認:
 
 ```typescript
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://ropxetguyjcmlimaypme.supabase.co';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://YOUR_PROJECT_ID.supabase.co';
 ```
 
 #### .envファイルを確認:
@@ -115,7 +115,7 @@ npx expo start --clear
 アプリを実行して、コンソールに表示されるログを確認:
 
 ```
-[Supabase] URL: https://ropxetguyjcmlimaypme.supabase.co
+[Supabase] URL: https://YOUR_PROJECT_ID.supabase.co
 [Supabase] Key exists: true
 [Auth] 新規登録を試行中... test@example.com
 [Auth] signUp response: { data: {...}, error: null }

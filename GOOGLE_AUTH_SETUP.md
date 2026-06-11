@@ -22,7 +22,7 @@
 4. 名前: `Supabase Auth`（任意）
 5. **承認済みのリダイレクト URI** に以下を追加:
    ```
-   https://ropxetguyjcmlimaypme.supabase.co/auth/v1/callback
+   https://YOUR_PROJECT_ID.supabase.co/auth/v1/callback
    ```
 6. 「作成」をクリック
 7. 表示される **「クライアントID」** と **「クライアントシークレット」** をコピー
@@ -72,9 +72,9 @@ npx expo start --clear
 2. **これは開発用URLなので無視してOK**
 3. Google Cloud Console のリダイレクトURIが以下であることを確認:
    ```
-   https://ropxetguyjcmlimaypme.supabase.co/auth/v1/callback
+   https://YOUR_PROJECT_ID.supabase.co/auth/v1/callback
    ```
-   ※ `ropxetguyjcmlimaypme` はあなたのSupabaseプロジェクトIDに置き換え
+   ※ `YOUR_PROJECT_ID` はあなたのSupabaseプロジェクトIDに置き換え
 
 ### エラー: "サーバーに接続できません"
 **原因**: Supabase Dashboard でGoogleプロバイダが有効化されていない

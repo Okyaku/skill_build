@@ -3,8 +3,14 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://ropxetguyjcmlimaypme.supabase.co';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJvcHhldGd1eWpjbWxpbWF5cG1lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4ODc2OTUsImV4cCI6MjA5NjQ2MzY5NX0.hV7NqqDfYU9ShqKZXbCiqdMmEAXse0g93pLxqiGenic';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Supabase環境変数が設定されていません。.envファイルを作成して、EXPO_PUBLIC_SUPABASE_URLとEXPO_PUBLIC_SUPABASE_ANON_KEYを設定してください。'
+  );
+}
 
 console.log('[Supabase] URL:', supabaseUrl);
 console.log('[Supabase] Key exists:', !!supabaseAnonKey);
