@@ -14,7 +14,10 @@ import {
 } from 'react-native';
 import RenderHtml from 'react-native-render-html';
 import { TreeNode } from '../utils/treeBuilder';
-import { getCategoriesByType, ItemType } from '../utils/categories';
+import { getExistingCategories, DEFAULT_CATEGORY_SUGGESTIONS, ItemType } from '../utils/categories';
+import { useAuth } from '../../contexts/AuthContext';
+import { useProject } from '../../contexts/ProjectContext';
+import { supabase } from '../../lib/supabase';
 
 interface NoteDetailModalProps {
   visible: boolean;
@@ -31,21 +34,49 @@ interface NoteDetailModalProps {
 
 export default function NoteDetailModal({ visible, node, onClose, onDelete, onUpdate }: NoteDetailModalProps): React.ReactElement {
   const { width } = useWindowDimensions();
+  const { user } = useAuth();
+  const { currentProjectId } = useProject();
+
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [editCategory, setEditCategory] = useState('');
   const [editItemType, setEditItemType] = useState<ItemType>('memo');
 
+  // カテゴリ候補
+  const [categorySuggestions, setCategorySuggestions] = useState<string[]>([]);
+
   useEffect(() => {
     if (node?.item) {
       setEditTitle(node.item.title);
       setEditContent(node.item.content);
-      setEditCategory(node.item.category || 'その他');
+      setEditCategory(node.item.category || '');
       setEditItemType(node.item.item_type as ItemType);
       setIsEditing(false);
     }
   }, [node]);
+
+  useEffect(() => {
+    if (visible && user?.id && currentProjectId) {
+      loadCategorySuggestions();
+    }
+  }, [visible, editItemType, user?.id, currentProjectId]);
+
+  const loadCategorySuggestions = async () => {
+    if (!user?.id || !currentProjectId) return;
+
+    const existing = await getExistingCategories(supabase, user.id, currentProjectId, editItemType);
+    const defaults = DEFAULT_CATEGORY_SUGGESTIONS[editItemType];
+
+    const combined = [...existing];
+    defaults.forEach(def => {
+      if (!combined.includes(def)) {
+        combined.push(def);
+      }
+    });
+
+    setCategorySuggestions(combined);
+  };
 
   if (!node || !node.item) return <></>;
 
@@ -115,7 +146,6 @@ export default function NoteDetailModal({ visible, node, onClose, onDelete, onUp
     setIsEditing(false);
   };
 
-  const currentCategories = getCategoriesByType(editItemType);
 
   return (
     <Modal
@@ -167,7 +197,7 @@ export default function NoteDetailModal({ visible, node, onClose, onDelete, onUp
                       ]}
                       onPress={() => {
                         setEditItemType(type);
-                        setEditCategory('その他');
+                        setEditCategory('');
                       }}
                     >
                       <Text
@@ -183,31 +213,44 @@ export default function NoteDetailModal({ visible, node, onClose, onDelete, onUp
                 </View>
 
                 <Text style={styles.label}>カテゴリ</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.categorySelector}
-                >
-                  {currentCategories.map((cat) => (
-                    <Pressable
-                      key={cat}
-                      style={[
-                        styles.categorySelectorChip,
-                        editCategory === cat && styles.categorySelectorChipActive,
-                      ]}
-                      onPress={() => setEditCategory(cat)}
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="カテゴリを入力"
+                  placeholderTextColor="#9CA3AF"
+                  value={editCategory}
+                  onChangeText={setEditCategory}
+                />
+
+                {categorySuggestions.length > 0 && (
+                  <>
+                    <Text style={styles.suggestionsLabel}>候補から選択:</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.categorySelector}
                     >
-                      <Text
-                        style={[
-                          styles.categorySelectorText,
-                          editCategory === cat && styles.categorySelectorTextActive,
-                        ]}
-                      >
-                        {cat}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+                      {categorySuggestions.map((cat) => (
+                        <Pressable
+                          key={cat}
+                          style={[
+                            styles.categorySelectorChip,
+                            editCategory === cat && styles.categorySelectorChipActive,
+                          ]}
+                          onPress={() => setEditCategory(cat)}
+                        >
+                          <Text
+                            style={[
+                              styles.categorySelectorText,
+                              editCategory === cat && styles.categorySelectorTextActive,
+                            ]}
+                          >
+                            {cat}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </>
+                )}
 
                 <Text style={styles.label}>内容</Text>
                 <TextInput
@@ -430,6 +473,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9CA3AF',
     fontWeight: '500',
+  },
+
+  suggestionsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 8,
+    marginBottom: 6,
   },
 
   footer: {
