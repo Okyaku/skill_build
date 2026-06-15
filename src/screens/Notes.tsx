@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   SafeAreaView,
   View,
@@ -21,7 +21,7 @@ import NoteDetailModal from '../components/NoteDetailModal';
 import QuizExecutionModal from '../components/QuizExecutionModal';
 import ExamQuestionModal from '../components/ExamQuestionModal';
 import CreateNoteModal from '../components/CreateNoteModal';
-import { getCategoriesByType, ItemType } from '../utils/categories';
+import { ItemType } from '../utils/categories';
 
 interface StudyItem {
   id: string;
@@ -54,8 +54,19 @@ export default function Notes({}: NotesScreenProps): React.ReactElement {
   const [itemTypeFilter, setItemTypeFilter] = useState<ItemTypeFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
-  // 現在のitem_typeに応じたカテゴリリスト
-  const currentCategories = getCategoriesByType(itemTypeFilter);
+  // 全カテゴリを動的に取得（重複除外）
+  const allCategories = React.useMemo(() => {
+    const categorySet = new Set<string>();
+    notes.forEach(note => {
+      if (note.category) {
+        // item_typeフィルターが適用されている場合は、そのタイプのカテゴリのみ
+        if (itemTypeFilter === 'all' || note.item_type === itemTypeFilter) {
+          categorySet.add(note.category);
+        }
+      }
+    });
+    return Array.from(categorySet).sort();
+  }, [notes, itemTypeFilter]);
 
   // モーダル関連
   const [selectedNote, setSelectedNote] = useState<StudyItem | null>(null);
@@ -360,7 +371,7 @@ export default function Notes({}: NotesScreenProps): React.ReactElement {
                 すべて
               </Text>
             </Pressable>
-            {currentCategories.map((category) => (
+            {allCategories.map((category) => (
               <Pressable
                 key={category}
                 style={[styles.categoryChip, categoryFilter === category && styles.categoryChipActive]}

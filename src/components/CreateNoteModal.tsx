@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -13,7 +13,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getCategoriesByType, ItemType } from '../utils/categories';
+import { getExistingCategories, DEFAULT_CATEGORY_SUGGESTIONS, ItemType } from '../utils/categories';
+import { generateCategory } from '../services/gemini';
+import { useAuth } from '../../contexts/AuthContext';
+import { useProject } from '../../contexts/ProjectContext';
+import { supabase } from '../../lib/supabase';
 
 interface CreateNoteModalProps {
   visible: boolean;
@@ -31,19 +35,67 @@ export default function CreateNoteModal({
   onClose,
   onSave,
 }: CreateNoteModalProps): React.ReactElement {
+  const { user } = useAuth();
+  const { currentProjectId } = useProject();
+
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [itemType, setItemType] = useState<ItemType>('term');
-  const [category, setCategory] = useState('ネットワーク');
+  const [category, setCategory] = useState('');
   const [saving, setSaving] = useState(false);
+  const [generatingCategory, setGeneratingCategory] = useState(false);
 
-  const currentCategories = getCategoriesByType(itemType);
+  // カテゴリ候補（既存 + デフォルト）
+  const [categorySuggestions, setCategorySuggestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (visible && user?.id && currentProjectId) {
+      loadCategorySuggestions();
+    }
+  }, [visible, itemType, user?.id, currentProjectId]);
+
+  const loadCategorySuggestions = async () => {
+    if (!user?.id || !currentProjectId) return;
+
+    const existing = await getExistingCategories(supabase, user.id, currentProjectId, itemType);
+    const defaults = DEFAULT_CATEGORY_SUGGESTIONS[itemType];
+
+    // 既存カテゴリを優先し、デフォルトを追加（重複除外）
+    const combined = [...existing];
+    defaults.forEach(def => {
+      if (!combined.includes(def)) {
+        combined.push(def);
+      }
+    });
+
+    setCategorySuggestions(combined);
+  };
 
   const handleItemTypeChange = (newType: ItemType) => {
     setItemType(newType);
-    // 種別変更時に新しいカテゴリリストの最初の項目を選択
-    const categories = getCategoriesByType(newType);
-    setCategory(categories[0]);
+    setCategory(''); // カテゴリをリセット
+  };
+
+  const handleGenerateCategory = async () => {
+    if (!title.trim() && !content.trim()) {
+      Alert.alert('ヒント', 'タイトルまたは内容を入力してからAI生成をお試しください');
+      return;
+    }
+
+    setGeneratingCategory(true);
+    try {
+      const generated = await generateCategory(
+        title.trim() || '無題',
+        content.trim() || '',
+        itemType
+      );
+      setCategory(generated);
+    } catch (err: any) {
+      console.error('[CreateNoteModal] カテゴリ生成エラー:', err);
+      Alert.alert('エラー', 'カテゴリの生成に失敗しました');
+    } finally {
+      setGeneratingCategory(false);
+    }
   };
 
   const handleSave = async () => {
@@ -56,6 +108,10 @@ export default function CreateNoteModal({
       Alert.alert('エラー', '内容を入力してください');
       return;
     }
+    if (!category.trim()) {
+      Alert.alert('エラー', 'カテゴリを入力またはAI生成してください');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -63,14 +119,14 @@ export default function CreateNoteModal({
         title: title.trim(),
         content: content.trim(),
         item_type: itemType,
-        category,
+        category: category.trim(),
       });
 
       // 成功したらリセット
       setTitle('');
       setContent('');
       setItemType('term');
-      setCategory('ネットワーク');
+      setCategory('');
     } catch (err) {
       console.error('[CreateNoteModal] 保存エラー:', err);
     } finally {
@@ -147,47 +203,16 @@ export default function CreateNoteModal({
               ))}
             </View>
 
-            {/* カテゴリ選択 */}
-            <Text style={styles.label}>カテゴリ *</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.categoryScrollView}
-            >
-              <View style={styles.categoryContainer}>
-                {currentCategories.map((cat) => (
-                  <Pressable
-                    key={cat}
-                    style={[
-                      styles.categoryChip,
-                      category === cat && styles.categoryChipActive,
-                    ]}
-                    onPress={() => setCategory(cat)}
-                    accessibilityLabel={cat}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryChipText,
-                        category === cat && styles.categoryChipTextActive,
-                      ]}
-                    >
-                      {cat}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </ScrollView>
-
             {/* タイトル */}
             <Text style={styles.label}>タイトル *</Text>
             <TextInput
               style={styles.input}
               placeholder={
                 itemType === 'term'
-                  ? '例: VPC'
+                  ? '例: 重要な用語'
                   : itemType === 'memo'
                   ? '例: 今日の学習メモ'
-                  : '例: S3のストレージクラスに関する問題'
+                  : '例: 過去問や練習問題'
               }
               placeholderTextColor="#9CA3AF"
               value={title}
@@ -214,6 +239,69 @@ export default function CreateNoteModal({
               textAlignVertical="top"
               editable={!saving}
             />
+
+            {/* カテゴリ */}
+            <View style={styles.categoryHeader}>
+              <Text style={styles.label}>カテゴリ *</Text>
+              <Pressable
+                style={styles.aiButton}
+                onPress={handleGenerateCategory}
+                disabled={generatingCategory || saving}
+              >
+                {generatingCategory ? (
+                  <ActivityIndicator size="small" color="#FF9900" />
+                ) : (
+                  <>
+                    <Ionicons name="sparkles" size={16} color="#FF9900" />
+                    <Text style={styles.aiButtonText}>AI生成</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="カテゴリを入力（例: 基礎知識、過去問）"
+              placeholderTextColor="#9CA3AF"
+              value={category}
+              onChangeText={setCategory}
+              editable={!saving && !generatingCategory}
+            />
+
+            {/* カテゴリ候補 */}
+            {categorySuggestions.length > 0 && (
+              <>
+                <Text style={styles.suggestionsLabel}>候補から選択:</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.categoryScrollView}
+                >
+                  <View style={styles.categoryContainer}>
+                    {categorySuggestions.map((cat) => (
+                      <Pressable
+                        key={cat}
+                        style={[
+                          styles.categoryChip,
+                          category === cat && styles.categoryChipActive,
+                        ]}
+                        onPress={() => setCategory(cat)}
+                        accessibilityLabel={cat}
+                      >
+                        <Text
+                          style={[
+                            styles.categoryChipText,
+                            category === cat && styles.categoryChipTextActive,
+                          ]}
+                        >
+                          {cat}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              </>
+            )}
           </ScrollView>
 
           {/* フッター */}
@@ -230,10 +318,10 @@ export default function CreateNoteModal({
               style={[
                 styles.button,
                 styles.buttonSave,
-                (saving || !title.trim() || !content.trim()) && styles.buttonDisabled,
+                (saving || !title.trim() || !content.trim() || !category.trim()) && styles.buttonDisabled,
               ]}
               onPress={handleSave}
-              disabled={saving || !title.trim() || !content.trim()}
+              disabled={saving || !title.trim() || !content.trim() || !category.trim()}
               accessibilityLabel="保存"
             >
               {saving ? (
@@ -323,6 +411,53 @@ const styles = StyleSheet.create({
     color: '#FF9900',
   },
 
+  input: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#111827',
+  },
+  textArea: {
+    minHeight: 150,
+    textAlignVertical: 'top',
+    paddingTop: 12,
+  },
+
+  categoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  aiButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FF9900',
+  },
+  aiButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FF9900',
+  },
+
+  suggestionsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 8,
+    marginBottom: 6,
+  },
   categoryScrollView: {
     marginBottom: 4,
   },
@@ -350,22 +485,6 @@ const styles = StyleSheet.create({
   },
   categoryChipTextActive: {
     color: '#92400E',
-  },
-
-  input: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#111827',
-  },
-  textArea: {
-    minHeight: 150,
-    textAlignVertical: 'top',
-    paddingTop: 12,
   },
 
   footer: {

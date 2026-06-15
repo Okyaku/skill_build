@@ -20,7 +20,7 @@ import { useProject } from '../../contexts/ProjectContext';
 import { supabase } from '../../lib/supabase';
 import { generateAIResponse, analyzeNoteContent, NoteMetadata } from '../services/gemini';
 import { useNavigation } from '@react-navigation/native';
-import { getCategoriesByType } from '../utils/categories';
+import { getExistingCategories, DEFAULT_CATEGORY_SUGGESTIONS, ItemType } from '../utils/categories';
 
 export interface ChatScreenProps {
   navigation: ChatProps['navigation'];
@@ -38,8 +38,8 @@ interface ChatMessage {
 }
 
 const SYSTEM_INSTRUCTIONS = {
-  study: 'あなたはAWSクラウドプラクティショナーのプロ講師です。親切な挨拶や前置きは一切省き、ユーザーの質問に対して3〜4行の簡潔な解説、または3つ以内の短い箇条書きでズバッと回答してください。',
-  casual: 'あなたはAWSの勉強を頑張るユーザーを応援する、気さくで優しいAIの先輩（または学習パートナー）です。AWSの専門的な解説は控えめにし、ユーザーの愚痴を聞いたり、モチベーションを高める楽しい雑談相手になってあげてください。日本語はフランクで親しみやすい口調にしてください。',
+  study: 'あなたは資格試験の学習をサポートするプロ講師です。親切な挨拶や前置きは一切省き、ユーザーの質問に対して3〜4行の簡潔な解説、または3つ以内の短い箇条書きでズバッと回答してください。',
+  casual: 'あなたは資格試験の勉強を頑張るユーザーを応援する、気さくで優しいAIの先輩（または学習パートナー）です。専門的な解説は控えめにし、ユーザーの愚痴を聞いたり、モチベーションを高める楽しい雑談相手になってあげてください。日本語はフランクで親しみやすい口調にしてください。',
 };
 
 export default function Chat({}: ChatScreenProps): React.ReactElement {
@@ -58,12 +58,13 @@ export default function Chat({}: ChatScreenProps): React.ReactElement {
   const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [selectedAiResponse, setSelectedAiResponse] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
-  const [noteCategory, setNoteCategory] = useState<string>('その他');
+  const [noteCategory, setNoteCategory] = useState<string>('');
   const [noteItemType, setNoteItemType] = useState<NoteMetadata['item_type']>('term');
   const [savingNote, setSavingNote] = useState(false);
   const [analyzingNote, setAnalyzingNote] = useState(false);
 
-  const currentCategories = getCategoriesByType(noteItemType);
+  // カテゴリ候補
+  const [categorySuggestions, setCategorySuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     if (!user?.id || !currentProjectId) {
@@ -78,6 +79,28 @@ export default function Chat({}: ChatScreenProps): React.ReactElement {
 
     void loadMessages();
   }, [user?.id, currentProjectId, mode]);
+
+  useEffect(() => {
+    if (user?.id && currentProjectId) {
+      loadCategorySuggestions();
+    }
+  }, [noteItemType, user?.id, currentProjectId]);
+
+  const loadCategorySuggestions = async () => {
+    if (!user?.id || !currentProjectId) return;
+
+    const existing = await getExistingCategories(supabase, user.id, currentProjectId, noteItemType);
+    const defaults = DEFAULT_CATEGORY_SUGGESTIONS[noteItemType];
+
+    const combined = [...existing];
+    defaults.forEach(def => {
+      if (!combined.includes(def)) {
+        combined.push(def);
+      }
+    });
+
+    setCategorySuggestions(combined);
+  };
 
   const handleSendMessage = async () => {
     if (!user?.id || !currentProjectId || !message.trim()) {
@@ -233,14 +256,17 @@ export default function Chat({}: ChatScreenProps): React.ReactElement {
 
   const handleItemTypeChange = (newType: NoteMetadata['item_type']) => {
     setNoteItemType(newType);
-    // 種別が変わったらカテゴリをその種別の最初のカテゴリにリセット
-    const categories = getCategoriesByType(newType);
-    setNoteCategory(categories[0] || 'その他');
+    // 種別が変わったらカテゴリをリセット
+    setNoteCategory('');
   };
 
   const handleSaveNote = async () => {
     if (!user?.id || !currentProjectId || !noteTitle.trim() || !selectedAiResponse.trim()) {
       Alert.alert('エラー', 'タイトルと内容を入力してください');
+      return;
+    }
+    if (!noteCategory.trim()) {
+      Alert.alert('エラー', 'カテゴリを入力してください');
       return;
     }
 
@@ -470,26 +496,40 @@ export default function Chat({}: ChatScreenProps): React.ReactElement {
               </View>
 
               <Text style={styles.label}>カテゴリ *</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.categoryScrollView}
-              >
-                <View style={styles.categoryGrid}>
-                  {currentCategories?.map((category) => (
-                    <Pressable
-                      key={category}
-                      style={[styles.categoryChip, noteCategory === category && styles.categoryChipActive]}
-                      onPress={() => setNoteCategory(category)}
-                      accessibilityLabel={category}
-                    >
-                      <Text style={[styles.categoryChipText, noteCategory === category && styles.categoryChipTextActive]}>
-                        {category}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="カテゴリを入力（例: 基礎知識、過去問）"
+                placeholderTextColor="#9CA3AF"
+                value={noteCategory}
+                onChangeText={setNoteCategory}
+                editable={!savingNote}
+              />
+
+              {categorySuggestions.length > 0 && (
+                <>
+                  <Text style={styles.suggestionsLabel}>候補から選択:</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.categoryScrollView}
+                  >
+                    <View style={styles.categoryGrid}>
+                      {categorySuggestions.map((category) => (
+                        <Pressable
+                          key={category}
+                          style={[styles.categoryChip, noteCategory === category && styles.categoryChipActive]}
+                          onPress={() => setNoteCategory(category)}
+                          accessibilityLabel={category}
+                        >
+                          <Text style={[styles.categoryChipText, noteCategory === category && styles.categoryChipTextActive]}>
+                            {category}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </>
+              )}
 
               <Text style={styles.label}>タイトル *</Text>
               <TextInput
@@ -722,6 +762,13 @@ const styles = StyleSheet.create({
     color: '#FF9900',
   },
 
+  suggestionsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 8,
+    marginBottom: 6,
+  },
   categoryScrollView: {
     marginBottom: 4,
   },

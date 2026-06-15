@@ -25,7 +25,7 @@ export async function generateAIResponse(
   const maxRetries = 3;
   let lastError: any = null;
 
-  const defaultInstruction = 'あなたはAWSクラウドプラクティショナーの合格を支援するプロ講師です。ユーザーの質問に対し、必ず【3〜4行程度の簡潔な解説】または【3つ以内の短い箇条書き】で回答してください。挨拶や前置きは一切不要です。フラッシュカードにそのまま登録できる短さと分かりやすさを徹底してください。';
+  const defaultInstruction = '資格試験の合格を支援するプロ講師です。ユーザーの質問に対し、必ず【3〜4行程度の簡潔な解説】または【3つ以内の短い箇条書き】で回答してください。挨拶や前置きは一切不要です。フラッシュカードにそのまま登録できる短さと分かりやすさを徹底してください。';
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -75,6 +75,55 @@ export interface NoteMetadata {
   item_type: 'term' | 'memo' | 'question';
 }
 
+/**
+ * タイトルと内容から適切なカテゴリを自動生成する
+ */
+export async function generateCategory(
+  title: string,
+  content: string,
+  itemType: 'term' | 'memo' | 'question'
+): Promise<string> {
+  if (!API_KEY) {
+    throw new Error('Gemini APIキーが設定されていません。');
+  }
+
+  console.log('[Gemini] カテゴリ生成開始:', { title, itemType });
+
+  const systemInstruction = `あなたは学習ノートのカテゴリを提案するアシスタントです。
+タイトルと内容から最適なカテゴリ名を1つだけ提案してください。
+
+【重要なルール】
+- カテゴリ名は2〜8文字程度の短い日本語
+- 資格試験の分野に基づいた分類を行う
+- ユーザーの学習内容に応じて柔軟に命名する
+- 既存のよくあるカテゴリ例: 基礎知識、応用、過去問、重要用語、概念、技術、考えたこと、勉強法
+- 出力はカテゴリ名のみ（説明文や前置きは不要）
+
+アイテム種別: ${itemType === 'term' ? '用語' : itemType === 'memo' ? 'メモ' : '問題'}`;
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      systemInstruction,
+      generationConfig: {
+        temperature: 0.5,
+        maxOutputTokens: 20,
+      },
+    });
+
+    const prompt = `タイトル: ${title}\n\n内容:\n${content.substring(0, 300)}`;
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const category = response.text().trim();
+
+    console.log('[Gemini] カテゴリ生成成功:', category);
+    return category || 'その他';
+  } catch (error: any) {
+    console.error('[Gemini] カテゴリ生成エラー:', error?.message);
+    return 'その他';
+  }
+}
+
 export async function analyzeNoteContent(text: string): Promise<NoteMetadata> {
   if (!API_KEY) {
     throw new Error('Gemini APIキーが設定されていません。.envファイルにEXPO_PUBLIC_GEMINI_API_KEYを設定してください。');
@@ -82,47 +131,30 @@ export async function analyzeNoteContent(text: string): Promise<NoteMetadata> {
 
   console.log('[Gemini] ノート解析開始:', text.substring(0, 50) + '...');
 
-  const systemInstruction = `あなたはAWSクラウドプラクティショナー試験の学習ノートを整理するアシスタントです。
+  const systemInstruction = `あなたは資格試験の学習ノートを整理するアシスタントです。
 ユーザーが保存したいテキストを分析し、以下のJSONフォーマット"のみ"を返してください。
 他の説明や前置きは一切不要です。
 
 {
-  "title": "抽出された用語名（例: VPC, S3）や適切なタイトル（15文字以内推奨）",
+  "title": "抽出された用語名や適切なタイトル（15文字以内推奨）",
   "item_type": "term (用語・概念の説明), memo (学習メモ・覚え書き), question (問題・クイズ形式) のいずれか",
-  "category": "item_typeに応じたカテゴリから最も適切なもの1つ"
+  "category": "内容に基づく適切なカテゴリ名（2〜8文字程度の日本語）"
 }
 
 【重要】判定手順:
 1. まず item_type を判定してください
-2. その item_type に応じたカテゴリ候補から category を選択してください
+2. 内容に基づいて適切なカテゴリ名を生成してください
 
 item_type判定基準:
 - 用語の定義や技術的な説明 → "term"
 - 学習中の気づき、メモ、タスク → "memo"
 - 問題文、選択肢、クイズ形式 → "question"
 
-category判定（item_typeに応じて異なります）:
-
-【term の場合のカテゴリ候補】
-- VPC/サブネット/セキュリティグループ → ネットワーク
-- IAM/KMS/暗号化 → セキュリティ
-- RDS/DynamoDB/Aurora → データベース
-- EC2/Lambda/ECS → コンピューティング
-- S3/EBS/Glacier → ストレージ
-- 上記に該当しない → その他
-
-【memo の場合のカテゴリ候補】
-- 学習の気づき、振り返り → 考えたこと
-- やるべきこと、TODOリスト → タスク
-- 学習方法、効率化のアイデア → 勉強法
-- 授業や講義の記録 → 授業メモ
-- 上記に該当しない → その他
-
-【question の場合のカテゴリ候補】
-- AWSの基本概念、クラウドの利点 → クラウドの概念
-- IAM、暗号化、コンプライアンス → セキュリティとコンプライアンス
-- サービスの機能、使い方 → テクノロジー
-- 料金体系、コスト最適化 → 請求と料金`;
+category命名のガイドライン:
+- カテゴリは内容に基づいて柔軟に命名してください
+- 2〜8文字程度の短い日本語
+- 例: 基礎知識、重要用語、概念、技術、考えたこと、勉強法、過去問、応用問題など
+- ユーザーの学習分野に応じた適切な分類を行ってください`;
 
   const maxRetries = 2;
   let lastError: any = null;

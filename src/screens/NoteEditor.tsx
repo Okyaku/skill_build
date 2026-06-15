@@ -18,7 +18,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProject } from '../../contexts/ProjectContext';
-import { getCategoriesByType, ItemType } from '../utils/categories';
+import { getExistingCategories, DEFAULT_CATEGORY_SUGGESTIONS, ItemType } from '../utils/categories';
+import { generateCategory } from '../services/gemini';
 
 type NoteEditorRouteParams = {
   noteId?: string;
@@ -40,25 +41,46 @@ export default function NoteEditor(): React.ReactElement {
   const [content, setContent] = useState(''); // リッチテキスト用（memo）
   const [plainContent, setPlainContent] = useState(''); // プレーンテキスト用（term, question）
   const [itemType, setItemType] = useState<ItemType>(initialItemType || 'memo');
-  const [category, setCategory] = useState('考えたこと');
+  const [category, setCategory] = useState('');
   const [loading, setLoading] = useState(!!noteId);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle');
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
+  const [generatingCategory, setGeneratingCategory] = useState(false);
 
-  const currentCategories = getCategoriesByType(itemType);
+  // カテゴリ候補（既存 + デフォルト）
+  const [categorySuggestions, setCategorySuggestions] = useState<string[]>([]);
+
   const isRichTextMode = itemType === 'memo';
 
   useEffect(() => {
     if (noteId) {
       loadNote();
+    } else if (user?.id && currentProjectId) {
+      loadCategorySuggestions();
     }
-  }, [noteId]);
+  }, [noteId, user?.id, currentProjectId]);
 
   useEffect(() => {
-    // カテゴリの初期値を設定
-    const categories = getCategoriesByType(itemType);
-    setCategory(categories[0]);
-  }, [itemType]);
+    if (user?.id && currentProjectId) {
+      loadCategorySuggestions();
+    }
+  }, [itemType, user?.id, currentProjectId]);
+
+  const loadCategorySuggestions = async () => {
+    if (!user?.id || !currentProjectId) return;
+
+    const existing = await getExistingCategories(supabase, user.id, currentProjectId, itemType);
+    const defaults = DEFAULT_CATEGORY_SUGGESTIONS[itemType];
+
+    const combined = [...existing];
+    defaults.forEach(def => {
+      if (!combined.includes(def)) {
+        combined.push(def);
+      }
+    });
+
+    setCategorySuggestions(combined);
+  };
 
   const loadNote = async () => {
     if (!noteId || !user?.id) return;
@@ -79,7 +101,7 @@ export default function NoteEditor(): React.ReactElement {
       } else if (data) {
         setTitle(data.title);
         setItemType(data.item_type as ItemType);
-        setCategory(data.category || '考えたこと');
+        setCategory(data.category || '');
 
         // メモの場合はリッチテキスト、それ以外はプレーンテキスト
         if (data.item_type === 'memo') {
@@ -195,10 +217,32 @@ export default function NoteEditor(): React.ReactElement {
     }
   };
 
+  const handleGenerateCategory = async () => {
+    if (!title.trim() && !content.trim() && !plainContent.trim()) {
+      Alert.alert('ヒント', 'タイトルまたは内容を入力してからAI生成をお試しください');
+      return;
+    }
+
+    setGeneratingCategory(true);
+    try {
+      const contentToAnalyze = isRichTextMode ? content : plainContent;
+      const generated = await generateCategory(
+        title.trim() || '無題',
+        contentToAnalyze.trim() || '',
+        itemType
+      );
+      setCategory(generated);
+    } catch (err: any) {
+      console.error('[NoteEditor] カテゴリ生成エラー:', err);
+      Alert.alert('エラー', 'カテゴリの生成に失敗しました');
+    } finally {
+      setGeneratingCategory(false);
+    }
+  };
+
   const handleItemTypeChange = (newType: ItemType) => {
     setItemType(newType);
-    const categories = getCategoriesByType(newType);
-    setCategory(categories[0]);
+    setCategory(''); // カテゴリをリセット
 
     // 種別変更時にコンテンツを相互変換
     if (newType === 'memo') {
@@ -270,40 +314,69 @@ export default function NoteEditor(): React.ReactElement {
         </View>
 
         {/* メタデータセクション */}
-        <ScrollView
-          style={styles.metaSection}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.metaContent}
-        >
+        <View style={styles.metaSection}>
           {/* 種別 */}
-          {(['term', 'memo', 'question'] as ItemType[]).map((type) => (
-            <Pressable
-              key={type}
-              style={[styles.metaChip, itemType === type && styles.metaChipActive]}
-              onPress={() => handleItemTypeChange(type)}
-            >
-              <Text style={[styles.metaChipText, itemType === type && styles.metaChipTextActive]}>
-                {getTypeLabel(type)}
-              </Text>
-            </Pressable>
-          ))}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.metaContent}
+          >
+            {(['term', 'memo', 'question'] as ItemType[]).map((type) => (
+              <Pressable
+                key={type}
+                style={[styles.metaChip, itemType === type && styles.metaChipActive]}
+                onPress={() => handleItemTypeChange(type)}
+              >
+                <Text style={[styles.metaChipText, itemType === type && styles.metaChipTextActive]}>
+                  {getTypeLabel(type)}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
 
-          <View style={styles.metaDivider} />
-
-          {/* カテゴリ */}
-          {currentCategories.map((cat) => (
+          {/* カテゴリ入力 */}
+          <View style={styles.categoryInputRow}>
+            <TextInput
+              style={styles.categoryInput}
+              placeholder="カテゴリを入力"
+              placeholderTextColor="#9CA3AF"
+              value={category}
+              onChangeText={setCategory}
+            />
             <Pressable
-              key={cat}
-              style={[styles.metaChip, category === cat && styles.metaChipActive]}
-              onPress={() => setCategory(cat)}
+              style={styles.aiButtonSmall}
+              onPress={handleGenerateCategory}
+              disabled={generatingCategory}
             >
-              <Text style={[styles.metaChipText, category === cat && styles.metaChipTextActive]}>
-                {cat}
-              </Text>
+              {generatingCategory ? (
+                <ActivityIndicator size="small" color="#FF9900" />
+              ) : (
+                <Ionicons name="sparkles" size={18} color="#FF9900" />
+              )}
             </Pressable>
-          ))}
-        </ScrollView>
+          </View>
+
+          {/* カテゴリ候補 */}
+          {categorySuggestions.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryChipsContent}
+            >
+              {categorySuggestions.map((cat) => (
+                <Pressable
+                  key={cat}
+                  style={[styles.categoryChipSmall, category === cat && styles.categoryChipSmallActive]}
+                  onPress={() => setCategory(cat)}
+                >
+                  <Text style={[styles.categoryChipSmallText, category === cat && styles.categoryChipSmallTextActive]}>
+                    {cat}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </View>
 
         {/* タイトル */}
         <View style={styles.titleSection}>
@@ -428,15 +501,14 @@ const styles = StyleSheet.create({
   },
 
   metaSection: {
-    maxHeight: 60,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    paddingVertical: 12,
   },
   metaContent: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
     gap: 8,
   },
   metaChip: {
@@ -459,11 +531,60 @@ const styles = StyleSheet.create({
   metaChipTextActive: {
     color: '#FF9900',
   },
-  metaDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 4,
+  categoryInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 8,
+  },
+  categoryInput: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#111827',
+  },
+  aiButtonSmall: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF7ED',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FF9900',
+  },
+  categoryChipsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 6,
+  },
+  categoryChipSmall: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  categoryChipSmallActive: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+  },
+  categoryChipSmallText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  categoryChipSmallTextActive: {
+    color: '#92400E',
   },
 
   titleSection: {
