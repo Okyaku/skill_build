@@ -332,7 +332,7 @@ export default function Chat({}: ChatScreenProps): React.ReactElement {
           <Ionicons name="chevron-back" size={28} color="#374151" />
           <Text style={styles.backButtonLabel}>プロジェクト</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>{currentProjectTitle || 'チャット'}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{currentProjectTitle || 'チャット'}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
