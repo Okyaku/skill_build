@@ -312,7 +312,7 @@ export default function Notes({}: NotesScreenProps): React.ReactElement {
         <View style={styles.headerContainer}>
           <Pressable
             style={styles.backButton}
-            onPress={() => navigation.navigate('ProjectList')}
+            onPress={() => navigation.goBack()}
             accessibilityLabel="プロジェクト一覧に戻る"
           >
             <Ionicons name="chevron-back" size={28} color="#374151" />

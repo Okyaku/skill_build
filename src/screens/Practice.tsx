@@ -146,7 +146,7 @@ export default function Practice({ navigation }: PracticeScreenProps): React.Rea
       <View style={styles.headerContainer}>
         <Pressable
           style={styles.backButton}
-          onPress={() => nav.navigate('ProjectList')}
+          onPress={() => nav.goBack()}
           accessibilityLabel="プロジェクト一覧に戻る"
         >
           <Ionicons name="chevron-back" size={28} color="#374151" />
