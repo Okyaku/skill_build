@@ -51,7 +51,7 @@ export default function NoteEditor(): React.ReactElement {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState(""); // リッチテキスト用（memo）
   const [plainContent, setPlainContent] = useState(""); // プレーンテキスト用（term, question）
-  const [itemType, setItemType] = useState<ItemType>(initialItemType || "memo");
+  const [itemType, setItemType] = useState<ItemType>(initialItemType || "term");
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(!!noteId);
   const [saving, setSaving] = useState(false);

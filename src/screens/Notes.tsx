@@ -565,7 +565,7 @@ export default function Notes({}: NotesScreenProps): React.ReactElement {
         <Pressable
           style={styles.fab}
           onPress={() =>
-            navigation.navigate("NoteEditor", { itemType: "memo" })
+            navigation.navigate("NoteEditor", { itemType: "term" })
           }
           accessibilityLabel="ノートを追加"
         >
