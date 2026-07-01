@@ -30,9 +30,10 @@ interface NoteDetailModalProps {
     category: string;
     item_type: string;
   }) => void;
+  onEditMemo?: (noteId: string) => void;
 }
 
-export default function NoteDetailModal({ visible, node, onClose, onDelete, onUpdate }: NoteDetailModalProps): React.ReactElement {
+export default function NoteDetailModal({ visible, node, onClose, onDelete, onUpdate, onEditMemo }: NoteDetailModalProps): React.ReactElement {
   const { width } = useWindowDimensions();
   const { user } = useAuth();
   const { currentProjectId } = useProject();
@@ -347,7 +348,15 @@ export default function NoteDetailModal({ visible, node, onClose, onDelete, onUp
                 </Pressable>
                 <Pressable
                   style={[styles.button, styles.buttonEdit]}
-                  onPress={() => setIsEditing(true)}
+                  onPress={() => {
+                    // メモの場合はNoteEditorに遷移
+                    if (item.item_type === 'memo' && onEditMemo && item.id) {
+                      onEditMemo(item.id);
+                    } else {
+                      // それ以外の場合はモーダル内で編集
+                      setIsEditing(true);
+                    }
+                  }}
                   accessibilityLabel="編集"
                 >
                   <Text style={styles.buttonTextEdit}>✏️ 編集</Text>

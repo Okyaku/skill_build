@@ -132,9 +132,10 @@ export default function Notes({}: NotesScreenProps): React.ReactElement {
       setSelectedNote(note);
       setExamModalVisible(true);
     } else if (note.item_type === 'memo') {
-      // 📝 メモ → NoteEditor（リッチテキスト編集画面）
-      console.log('[Notes] NoteEditor（リッチテキスト編集）へ遷移します - item_type:', note.item_type);
-      navigation.navigate('NoteEditor', { noteId: note.id, itemType: note.item_type as any });
+      // 📝 メモ → NoteDetailModal（詳細表示、削除・編集・閉じる機能付き）
+      console.log('[Notes] NoteDetailModal（詳細表示）を開きます - item_type:', note.item_type);
+      setSelectedNote(note);
+      setDetailModalVisible(true);
     } else {
       // 想定外の種別
       console.error('[Notes] 想定外のitem_type:', note.item_type, note);
@@ -443,12 +444,17 @@ export default function Notes({}: NotesScreenProps): React.ReactElement {
           }}
           onDelete={handleDeleteNote}
           onUpdate={handleUpdateNote}
+          onEditMemo={(noteId) => {
+            setDetailModalVisible(false);
+            setSelectedNote(null);
+            navigation.navigate('NoteEditor', { noteId, itemType: 'memo' });
+          }}
         />
 
         {/* クイズモーダル（用語フラッシュカード） */}
         <QuizExecutionModal
           visible={quizModalVisible}
-          item={selectedNote}
+          item={quizModalVisible ? selectedNote : null}
           onClose={() => {
             setQuizModalVisible(false);
             setSelectedNote(null);
@@ -458,7 +464,7 @@ export default function Notes({}: NotesScreenProps): React.ReactElement {
         {/* 実戦問題モーダル */}
         <ExamQuestionModal
           visible={examModalVisible}
-          item={selectedNote}
+          item={examModalVisible ? selectedNote : null}
           onClose={() => {
             setExamModalVisible(false);
             setSelectedNote(null);
