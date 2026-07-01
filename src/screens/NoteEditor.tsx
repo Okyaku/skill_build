@@ -13,11 +13,6 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  RichEditor,
-  RichToolbar,
-  actions,
-} from "react-native-pell-rich-editor";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
@@ -44,12 +39,11 @@ export default function NoteEditor(): React.ReactElement {
   const route = useRoute<NoteEditorRoute>();
   const { user } = useAuth();
   const { currentProjectId } = useProject();
-  const richText = useRef<RichEditor>(null);
 
   const { noteId, itemType: initialItemType } = route.params || {};
 
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState(""); // リッチテキスト用（memo）
+  const [content, setContent] = useState(""); // メモ用（プレーンテキスト）
   const [plainContent, setPlainContent] = useState(""); // プレーンテキスト用（term, question）
   const [itemType, setItemType] = useState<ItemType>(initialItemType || "term");
   const [category, setCategory] = useState("");
@@ -62,6 +56,19 @@ export default function NoteEditor(): React.ReactElement {
   const [categorySuggestions, setCategorySuggestions] = useState<string[]>([]);
 
   const isRichTextMode = itemType === "memo";
+
+  const htmlToPlainText = (html: string): string =>
+    html
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
+
+  const plainTextToHtml = (text: string): string =>
+    text
+      .split("\n")
+      .map((line) => line || "&nbsp;")
+      .join("<br>");
 
   useEffect(() => {
     if (noteId) {
@@ -121,8 +128,7 @@ export default function NoteEditor(): React.ReactElement {
 
         // メモの場合はリッチテキスト、それ以外はプレーンテキスト
         if (data.item_type === "memo") {
-          setContent(data.content);
-          richText.current?.setContentHTML(data.content);
+          setContent(htmlToPlainText(data.content));
         } else {
           setPlainContent(data.content);
         }
@@ -144,8 +150,10 @@ export default function NoteEditor(): React.ReactElement {
     setSaving(true);
 
     try {
-      // メモの場合はリッチテキスト、それ以外はプレーンテキストを保存
-      const contentToSave = isRichTextMode ? content : plainContent;
+      // メモはHTML、用語・問題はプレーンテキストとして保存
+      const contentToSave = isRichTextMode
+        ? plainTextToHtml(content)
+        : plainContent;
 
       const noteData = {
         user_id: user.id,
@@ -249,18 +257,12 @@ export default function NoteEditor(): React.ReactElement {
     if (newType === "memo") {
       // プレーンテキスト → リッチテキストへ切り替え
       if (plainContent) {
-        const htmlContent = plainContent.replace(/\n/g, "<br>");
-        setContent(htmlContent);
-        richText.current?.setContentHTML(htmlContent);
+        setContent(plainContent);
       }
     } else {
       // リッチテキスト → プレーンテキストへ切り替え
       if (content) {
-        // HTMLタグを削除してプレーンテキストに変換
-        const plainText = content
-          .replace(/<[^>]+>/g, "")
-          .replace(/<br\s*\/?>/gi, "\n");
-        setPlainContent(plainText);
+        setPlainContent(content);
       }
     }
   };
@@ -438,35 +440,21 @@ export default function NoteEditor(): React.ReactElement {
         {/* エディタエリア - 種別に応じて切り替え */}
         {isRichTextMode ? (
           <>
-            {/* リッチテキストエディタ（メモ用） */}
+            {/* プレーンテキストエディタ（メモ用） */}
             <ScrollView style={styles.editorContainer}>
-              <RichEditor
-                ref={richText}
-                style={styles.richEditor}
+              <TextInput
+                style={styles.plainTextEditor}
                 placeholder="内容を入力..."
-                onChange={handleContentChange}
-                initialContentHTML={content}
+                placeholderTextColor="#9CA3AF"
+                value={content}
+                onChangeText={(text) => {
+                  setContent(text);
+                  setHasUnsavedChanges(true);
+                }}
+                multiline
+                textAlignVertical="top"
               />
             </ScrollView>
-
-            {/* ツールバー */}
-            <RichToolbar
-              editor={richText}
-              actions={[
-                actions.setBold,
-                actions.setItalic,
-                actions.setUnderline,
-                actions.insertBulletsList,
-                actions.insertOrderedList,
-                actions.heading1,
-                actions.heading2,
-                actions.undo,
-                actions.redo,
-              ]}
-              iconTint="#374151"
-              selectedIconTint="#FF9900"
-              style={styles.toolbar}
-            />
           </>
         ) : (
           <>
