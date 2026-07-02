@@ -145,7 +145,19 @@ export default function NoteEditor(): React.ReactElement {
   };
 
   const handleSave = async () => {
-    if (!user?.id || !currentProjectId || !title.trim()) return;
+    // バリデーション
+    if (!title.trim()) {
+      Alert.alert("エラー", "タイトルを入力してください");
+      return;
+    }
+
+    const contentToCheck = isRichTextMode ? content : plainContent;
+    if (!contentToCheck.trim()) {
+      Alert.alert("エラー", "内容を入力してください");
+      return;
+    }
+
+    if (!user?.id || !currentProjectId) return;
 
     setSaving(true);
 
