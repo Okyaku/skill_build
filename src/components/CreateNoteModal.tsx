@@ -318,10 +318,10 @@ export default function CreateNoteModal({
               style={[
                 styles.button,
                 styles.buttonSave,
-                (saving || !title.trim() || !content.trim() || !category.trim()) && styles.buttonDisabled,
+                saving && styles.buttonDisabled,
               ]}
               onPress={handleSave}
-              disabled={saving || !title.trim() || !content.trim() || !category.trim()}
+              disabled={saving}
               accessibilityLabel="保存"
             >
               {saving ? (
