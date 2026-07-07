@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   Modal,
   View,
@@ -11,13 +11,17 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { getExistingCategories, DEFAULT_CATEGORY_SUGGESTIONS, ItemType } from '../utils/categories';
-import { generateCategory } from '../services/gemini';
-import { useAuth } from '../../contexts/AuthContext';
-import { useProject } from '../../contexts/ProjectContext';
-import { supabase } from '../../lib/supabase';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  getExistingCategories,
+  DEFAULT_CATEGORY_SUGGESTIONS,
+  ItemType,
+} from "../utils/categories";
+import { generateCategory } from "../services/gemini";
+import { useAuth } from "../../contexts/AuthContext";
+import { useProject } from "../../contexts/ProjectContext";
+import { supabase } from "../../lib/supabase";
 
 interface CreateNoteModalProps {
   visible: boolean;
@@ -38,10 +42,10 @@ export default function CreateNoteModal({
   const { user } = useAuth();
   const { currentProjectId } = useProject();
 
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [itemType, setItemType] = useState<ItemType>('term');
-  const [category, setCategory] = useState('');
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [itemType, setItemType] = useState<ItemType>("term");
+  const [category, setCategory] = useState("");
   const [saving, setSaving] = useState(false);
   const [generatingCategory, setGeneratingCategory] = useState(false);
 
@@ -57,42 +61,50 @@ export default function CreateNoteModal({
   const loadCategorySuggestions = async () => {
     if (!user?.id || !currentProjectId) return;
 
-    const existing = await getExistingCategories(supabase, user.id, currentProjectId, itemType);
+    const existing = await getExistingCategories(
+      supabase,
+      user.id,
+      currentProjectId,
+      itemType,
+    );
     const defaults = DEFAULT_CATEGORY_SUGGESTIONS[itemType];
 
     // 既存カテゴリを優先し、デフォルトを追加（重複除外）
     const combined = [...existing];
-    defaults.forEach(def => {
-      if (!combined.includes(def)) {
-        combined.push(def);
-      }
-    });
+    // defaults.forEach(def => {
+    //   if (!combined.includes(def)) {
+    //     combined.push(def);
+    //   }
+    // });
 
     setCategorySuggestions(combined);
   };
 
   const handleItemTypeChange = (newType: ItemType) => {
     setItemType(newType);
-    setCategory(''); // カテゴリをリセット
+    setCategory(""); // カテゴリをリセット
   };
 
   const handleGenerateCategory = async () => {
     if (!title.trim() && !content.trim()) {
-      Alert.alert('ヒント', 'タイトルまたは内容を入力してからAI生成をお試しください');
+      Alert.alert(
+        "ヒント",
+        "タイトルまたは内容を入力してからAI生成をお試しください",
+      );
       return;
     }
 
     setGeneratingCategory(true);
     try {
       const generated = await generateCategory(
-        title.trim() || '無題',
-        content.trim() || '',
-        itemType
+        title.trim() || "無題",
+        content.trim() || "",
+        itemType,
       );
       setCategory(generated);
     } catch (err: any) {
-      console.error('[CreateNoteModal] カテゴリ生成エラー:', err);
-      Alert.alert('エラー', 'カテゴリの生成に失敗しました');
+      console.error("[CreateNoteModal] カテゴリ生成エラー:", err);
+      Alert.alert("エラー", "カテゴリの生成に失敗しました");
     } finally {
       setGeneratingCategory(false);
     }
@@ -101,15 +113,15 @@ export default function CreateNoteModal({
   const handleSave = async () => {
     // バリデーション
     if (!title.trim()) {
-      Alert.alert('エラー', 'タイトルを入力してください');
+      Alert.alert("エラー", "タイトルを入力してください");
       return;
     }
     if (!content.trim()) {
-      Alert.alert('エラー', '内容を入力してください');
+      Alert.alert("エラー", "内容を入力してください");
       return;
     }
     if (!category.trim()) {
-      Alert.alert('エラー', 'カテゴリを入力またはAI生成してください');
+      Alert.alert("エラー", "カテゴリを入力またはAI生成してください");
       return;
     }
 
@@ -123,12 +135,12 @@ export default function CreateNoteModal({
       });
 
       // 成功したらリセット
-      setTitle('');
-      setContent('');
-      setItemType('term');
-      setCategory('');
+      setTitle("");
+      setContent("");
+      setItemType("term");
+      setCategory("");
     } catch (err) {
-      console.error('[CreateNoteModal] 保存エラー:', err);
+      console.error("[CreateNoteModal] 保存エラー:", err);
     } finally {
       setSaving(false);
     }
@@ -142,12 +154,12 @@ export default function CreateNoteModal({
 
   const getTypeLabel = (type: ItemType): string => {
     switch (type) {
-      case 'term':
-        return '📖 用語';
-      case 'memo':
-        return '📝 メモ';
-      case 'question':
-        return '❓ 問題';
+      case "term":
+        return "📖 用語";
+      case "memo":
+        return "📝 メモ";
+      case "question":
+        return "❓ 問題";
     }
   };
 
@@ -159,7 +171,7 @@ export default function CreateNoteModal({
       onRequestClose={handleClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.overlay}
       >
         <View style={styles.container}>
@@ -181,7 +193,7 @@ export default function CreateNoteModal({
             {/* 種別選択 */}
             <Text style={styles.label}>種別 *</Text>
             <View style={styles.typeSelector}>
-              {(['term', 'memo', 'question'] as ItemType[]).map((type) => (
+              {(["term", "memo", "question"] as ItemType[]).map((type) => (
                 <Pressable
                   key={type}
                   style={[
@@ -208,11 +220,11 @@ export default function CreateNoteModal({
             <TextInput
               style={styles.input}
               placeholder={
-                itemType === 'term'
-                  ? '例: 重要な用語'
-                  : itemType === 'memo'
-                  ? '例: 今日の学習メモ'
-                  : '例: 過去問や練習問題'
+                itemType === "term"
+                  ? "例: 重要な用語"
+                  : itemType === "memo"
+                    ? "例: 今日の学習メモ"
+                    : "例: 過去問や練習問題"
               }
               placeholderTextColor="#9CA3AF"
               value={title}
@@ -225,11 +237,11 @@ export default function CreateNoteModal({
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder={
-                itemType === 'term'
-                  ? '用語の意味や説明を入力...'
-                  : itemType === 'memo'
-                  ? 'メモの内容を入力...'
-                  : '問題文と解答・解説を入力...'
+                itemType === "term"
+                  ? "用語の意味や説明を入力..."
+                  : itemType === "memo"
+                    ? "メモの内容を入力..."
+                    : "問題文と解答・解説を入力..."
               }
               placeholderTextColor="#9CA3AF"
               value={content}
@@ -340,34 +352,34 @@ export default function CreateNoteModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '90%',
+    maxHeight: "90%",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: "#E5E7EB",
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
+    fontWeight: "700",
+    color: "#111827",
   },
   closeButton: {
     width: 44,
     height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   content: {
@@ -377,14 +389,14 @@ const styles = StyleSheet.create({
 
   label: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#374151',
+    fontWeight: "700",
+    color: "#374151",
     marginBottom: 8,
     marginTop: 16,
   },
 
   typeSelector: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     marginBottom: 4,
   },
@@ -393,68 +405,68 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 10,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
     borderWidth: 2,
-    borderColor: '#F3F4F6',
+    borderColor: "#F3F4F6",
   },
   typeButtonActive: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#FF9900',
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FF9900",
   },
   typeButtonText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontWeight: "600",
+    color: "#6B7280",
   },
   typeButtonTextActive: {
-    color: '#FF9900',
+    color: "#FF9900",
   },
 
   input: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: "#F9FAFB",
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: "#E5E7EB",
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#111827',
+    color: "#111827",
   },
   textArea: {
     minHeight: 150,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
     paddingTop: 12,
   },
 
   categoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginTop: 16,
     marginBottom: 8,
   },
   aiButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#FFF7ED',
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: '#FF9900',
+    borderColor: "#FF9900",
   },
   aiButtonText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#FF9900',
+    fontWeight: "600",
+    color: "#FF9900",
   },
 
   suggestionsLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontWeight: "600",
+    color: "#6B7280",
     marginTop: 8,
     marginBottom: 6,
   },
@@ -462,7 +474,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   categoryContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     paddingRight: 20,
   },
@@ -470,55 +482,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: "#F3F4F6",
     borderWidth: 2,
-    borderColor: '#F3F4F6',
+    borderColor: "#F3F4F6",
   },
   categoryChipActive: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#F59E0B',
+    backgroundColor: "#FEF3C7",
+    borderColor: "#F59E0B",
   },
   categoryChipText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
+    fontWeight: "600",
+    color: "#374151",
   },
   categoryChipTextActive: {
-    color: '#92400E',
+    color: "#92400E",
   },
 
   footer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: "#E5E7EB",
     gap: 12,
   },
   button: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   buttonCancel: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: "#F3F4F6",
   },
   buttonSave: {
-    backgroundColor: '#FF9900',
+    backgroundColor: "#FF9900",
   },
   buttonDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: "#D1D5DB",
   },
   buttonTextCancel: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#374151',
+    fontWeight: "600",
+    color: "#374151",
   },
   buttonTextSave: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

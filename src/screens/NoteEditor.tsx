@@ -96,11 +96,11 @@ export default function NoteEditor(): React.ReactElement {
     const defaults = DEFAULT_CATEGORY_SUGGESTIONS[itemType];
 
     const combined = [...existing];
-    defaults.forEach((def) => {
-      if (!combined.includes(def)) {
-        combined.push(def);
-      }
-    });
+    // defaults.forEach((def) => {
+    //   if (!combined.includes(def)) {
+    //     combined.push(def);
+    //   }
+    // });
 
     setCategorySuggestions(combined);
   };
