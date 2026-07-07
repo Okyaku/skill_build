@@ -51,6 +51,7 @@ export default function CreateNoteModal({
 
   // カテゴリ候補（既存 + デフォルト）
   const [categorySuggestions, setCategorySuggestions] = useState<string[]>([]);
+  const isQuestionMode = itemType === "question";
 
   useEffect(() => {
     if (visible && user?.id && currentProjectId) {
@@ -89,7 +90,9 @@ export default function CreateNoteModal({
     if (!title.trim() && !content.trim()) {
       Alert.alert(
         "ヒント",
-        "タイトルまたは内容を入力してからAI生成をお試しください",
+        isQuestionMode
+          ? "問題または解答を入力してからAI生成をお試しください"
+          : "タイトルまたは内容を入力してからAI生成をお試しください",
       );
       return;
     }
@@ -113,11 +116,19 @@ export default function CreateNoteModal({
   const handleSave = async () => {
     // バリデーション
     if (!title.trim()) {
-      Alert.alert("エラー", "タイトルを入力してください");
+      Alert.alert(
+        "エラー",
+        isQuestionMode
+          ? "問題を入力してください"
+          : "タイトルを入力してください",
+      );
       return;
     }
     if (!content.trim()) {
-      Alert.alert("エラー", "内容を入力してください");
+      Alert.alert(
+        "エラー",
+        isQuestionMode ? "解答を入力してください" : "内容を入力してください",
+      );
       return;
     }
     if (!category.trim()) {
@@ -215,39 +226,48 @@ export default function CreateNoteModal({
               ))}
             </View>
 
-            {/* タイトル */}
-            <Text style={styles.label}>タイトル *</Text>
+            {/* タイトル / 問題 */}
+            <Text style={styles.label}>
+              {isQuestionMode ? "問題 *" : "タイトル *"}
+            </Text>
             <TextInput
               style={styles.input}
               placeholder={
-                itemType === "term"
-                  ? "例: 重要な用語"
-                  : itemType === "memo"
-                    ? "例: 今日の学習メモ"
-                    : "例: 過去問や練習問題"
+                isQuestionMode
+                  ? "例: 次の定理を説明してください"
+                  : itemType === "term"
+                    ? "例: 重要な用語"
+                    : itemType === "memo"
+                      ? "例: 今日の学習メモ"
+                      : "例: 過去問や練習問題"
               }
               placeholderTextColor="#9CA3AF"
               value={title}
               onChangeText={setTitle}
+              multiline={isQuestionMode}
               editable={!saving}
             />
 
-            {/* 内容 */}
-            <Text style={styles.label}>内容 *</Text>
+            {/* 内容 / 解答 */}
+            <Text style={styles.label}>
+              {isQuestionMode ? "解答 *" : "内容 *"}
+            </Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder={
-                itemType === "term"
-                  ? "用語の意味や説明を入力..."
-                  : itemType === "memo"
-                    ? "メモの内容を入力..."
-                    : "問題文と解答・解説を入力..."
+                isQuestionMode
+                  ? "解答や解説を入力..."
+                  : itemType === "term"
+                    ? "用語の意味や説明を入力..."
+                    : itemType === "memo"
+                      ? "メモの内容を入力..."
+                      : "問題文と解答・解説を入力..."
               }
               placeholderTextColor="#9CA3AF"
               value={content}
               onChangeText={setContent}
               multiline
-              numberOfLines={8}
+              numberOfLines={isQuestionMode ? 6 : 8}
               textAlignVertical="top"
               editable={!saving}
             />
