@@ -56,6 +56,7 @@ export default function NoteEditor(): React.ReactElement {
   const [categorySuggestions, setCategorySuggestions] = useState<string[]>([]);
 
   const isRichTextMode = itemType === "memo";
+  const isQuestionMode = itemType === "question";
 
   const htmlToPlainText = (html: string): string =>
     html
@@ -96,11 +97,11 @@ export default function NoteEditor(): React.ReactElement {
     const defaults = DEFAULT_CATEGORY_SUGGESTIONS[itemType];
 
     const combined = [...existing];
-    defaults.forEach((def) => {
-      if (!combined.includes(def)) {
-        combined.push(def);
-      }
-    });
+    // defaults.forEach((def) => {
+    //   if (!combined.includes(def)) {
+    //     combined.push(def);
+    //   }
+    // });
 
     setCategorySuggestions(combined);
   };
@@ -147,13 +148,21 @@ export default function NoteEditor(): React.ReactElement {
   const handleSave = async () => {
     // バリデーション
     if (!title.trim()) {
-      Alert.alert("エラー", "タイトルを入力してください");
+      Alert.alert(
+        "エラー",
+        isQuestionMode
+          ? "問題を入力してください"
+          : "タイトルを入力してください",
+      );
       return;
     }
 
     const contentToCheck = isRichTextMode ? content : plainContent;
     if (!contentToCheck.trim()) {
-      Alert.alert("エラー", "内容を入力してください");
+      Alert.alert(
+        "エラー",
+        isQuestionMode ? "解答を入力してください" : "内容を入力してください",
+      );
       return;
     }
 
@@ -437,11 +446,11 @@ export default function NoteEditor(): React.ReactElement {
           )}
         </View>
 
-        {/* タイトル */}
+        {/* タイトル / 問題 */}
         <View style={styles.titleSection}>
           <TextInput
             style={styles.titleInput}
-            placeholder="タイトルを入力"
+            placeholder={isQuestionMode ? "問題を入力" : "タイトルを入力"}
             placeholderTextColor="#9CA3AF"
             value={title}
             onChangeText={handleTitleChange}
@@ -475,9 +484,11 @@ export default function NoteEditor(): React.ReactElement {
               <TextInput
                 style={styles.plainTextEditor}
                 placeholder={
-                  itemType === "term"
-                    ? "用語の意味や説明を入力..."
-                    : "問題文と解答・解説を入力..."
+                  isQuestionMode
+                    ? "解答や解説を入力..."
+                    : itemType === "term"
+                      ? "用語の意味や説明を入力..."
+                      : "問題文と解答・解説を入力..."
                 }
                 placeholderTextColor="#9CA3AF"
                 value={plainContent}
